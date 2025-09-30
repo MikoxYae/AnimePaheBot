@@ -204,9 +204,27 @@ def sanitize_filename(file_name):
     file_name = re.sub(r'[<>:"/\\|?*]', '', file_name)
     return file_name
 
-def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="", user_id=None):
+def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="", user_id=None, progress_message=None, anime_name=None, episode_number=None):
     upload_method = get_upload_method(user_id)  # Retrieve user's upload method
     forwarding_channel = LOG_CHANNEL  # Channel to forward the file
+
+    # Progress callback for upload
+    def progress_callback(current, total):
+        try:
+            if progress_message:
+                percentage = (current / total) * 100 if total > 0 else 0
+                filled_length = int(10 * current // total) if total > 0 else 0
+                bar = '█' * filled_length + '░' * (10 - filled_length)
+                
+                progress_text = f"<b>📤 Uploading...</b>\n\n"
+                progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
+                progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
+                progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
+                progress_text += f"<b>Uploaded:</b> {humanbytes(current)} / {humanbytes(total)}"
+                
+                progress_message.edit(progress_text)
+        except:
+            pass
 
     try:        
         user_info = client.get_users(user_id)
@@ -214,13 +232,15 @@ def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="",
         
         # Add user info to the caption
         caption_with_info = f"{caption}\n\n{user_details}"
+        
         if upload_method == "document":
             # Send as document
             sent_message = client.send_document(
                 chat_id,
                 file_path,
                 thumb=thumbnail if thumbnail else None,
-                caption=caption
+                caption=caption,
+                progress=progress_callback
             )
         else:
             # Send as video
@@ -239,18 +259,23 @@ def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="",
                 supports_streaming= True,
                 has_spoiler= True,
                 thumb=None,
-                caption=caption
+                caption=caption,
+                progress=progress_callback
             )
         
-        # Forward the message to the specified channel
-        forward_message = client.copy_message(
-            chat_id=forwarding_channel,
-            from_chat_id=chat_id,
-            message_id=sent_message.id,
-            caption=caption_with_info
-        )
+        # Forward the message to the specified channel (with error handling)
+        try:
+            forward_message = client.copy_message(
+                chat_id=forwarding_channel,
+                from_chat_id=chat_id,
+                message_id=sent_message.id,
+                caption=caption_with_info
+            )
+        except Exception as e:
+            print(f"Failed to forward to LOG_CHANNEL: {e}")
+            # Continue even if forwarding fails
         
-        # Delete the file after sending and forwarding
+        # Delete the file after sending
         os.remove(file_path)
         
     except Exception as e:
