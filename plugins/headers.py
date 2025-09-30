@@ -1,11 +1,8 @@
-#..........This Bot Made By [RAHAT](https://t.me/r4h4t_69)..........#
-#..........Anyone Can Modify This As He Likes..........#
-#..........Just one requests do not remove my credit..........#
+import cloudscraper
 
+# Use cloudscraper instead of requests.Session()
+session = cloudscraper.create_scraper()
 
-import requests
-
-session = requests.Session()
 session.headers.update({
     'authority': 'animepahe.ru',
     'accept': 'application/json, text/javascript, */*; q=0.01',
