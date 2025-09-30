@@ -1,7 +1,3 @@
-#..........This Bot Made By [RAHAT](https://t.me/r4h4t_69)..........#
-#..........Anyone Can Modify This As He Likes..........#
-#..........Just one requests do not remove my credit..........#
-
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import pyrogram.errors
@@ -151,7 +147,12 @@ def search_anime(client, message):
         return
 
     search_url = f"https://animepahe.ru/api?m=search&q={query.replace(' ', '+')}"
-    response = session.get(search_url).json()
+    
+    try:
+        response = session.get(search_url, timeout=10).json()
+    except Exception as e:
+        message.reply_text(f"❌ Error connecting to AnimePahe:\n\n<code>{str(e)}</code>\n\nThis may be due to:\n• Network restrictions on this server\n• AnimePahe blocking this IP\n• DNS resolution issues\n\nTry using a VPS server instead.")
+        return
 
     if response['total'] == 0:
         message.reply_text("Anime not found.")
@@ -256,7 +257,7 @@ def send_latest_anime(client, message):
     try:
         # Fetch the latest airing anime from AnimePahe
         API_URL = "https://animepahe.ru/api?m=airing&page=1"
-        response = session.get(API_URL)
+        response = session.get(API_URL, timeout=10)
         if response.status_code == 200:
             data = response.json()
             anime_list = data.get('data', [])
@@ -290,7 +291,7 @@ def send_latest_anime(client, message):
     try:
         # Fetch the latest airing anime from AnimePahe
         API_URL = "https://animepahe.ru/anime/airing"
-        response = session.get(API_URL)
+        response = session.get(API_URL, timeout=10)
         if response.status_code == 200:          
             soup = BeautifulSoup(response.text, "html.parser")
 
@@ -319,5 +320,3 @@ def send_latest_anime(client, message):
         # Log the error and notify the user
         #client.send_message(-1002457905787, f"Error: {e}")
         message.reply_text("Something went wrong. Please try again later.")
-
-        
