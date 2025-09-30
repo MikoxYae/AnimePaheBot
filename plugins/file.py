@@ -158,7 +158,7 @@ def download_file(url, download_path, progress_message=None, anime_name=None, ep
             # If download completed successfully, break the retry loop
             return download_path
             
-        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError, requests.exceptions.IncompleteRead) as e:
+        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError, ConnectionResetError) as e:
             retry_count += 1
             if retry_count < max_retries:
                 if progress_message:
@@ -222,7 +222,7 @@ def download_file(url, download_path, progress_message=None, anime_name=None, ep
             raise Exception(f"Download error: {str(e)}")
     
     return download_path
-
+    
 def sanitize_filename(file_name):
     # Remove invalid characters from the file name
     file_name = re.sub(r'[<>:"/\\|?*]', '', file_name)
