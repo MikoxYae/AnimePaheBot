@@ -250,15 +250,15 @@ def download_and_upload_file(client, callback_query):
     os.makedirs(user_download_dir, exist_ok=True)
     download_path = os.path.join(user_download_dir, file_name)
 
-    #callback_query.message.reply_text(f"Added to queue: {file_name}. Downloading now...")
-    #dl_msg = callback_query.message.reply_text(f"<b>Added to queue:</b>\n <pre language="python">{file_name}</pre>\n<b>Downloading now...</b>")
-    dl_msg = callback_query.message.reply_text(f"<b>Added to queue:</b>\n <pre>{file_name}</pre>\n<b>Downloading now...</b>")
+    # Send initial progress message
+    dl_msg = callback_query.message.reply_text(f"<b>📥 Starting Download...</b>\n\n<b>Anime:</b> <code>{short_name}</code>\n<b>Episode:</b> <code>{episode_number}</code>")
     
     try:
-        # Download the file
-        download_file(direct_link, download_path)
-        #callback_query.message.reply_text("File downloaded, uploading...")
-        dl_msg.edit("<b>Episode downloaded, uploading...</b>")
+        # Download the file with progress bar
+        download_file(direct_link, download_path, progress_message=dl_msg, anime_name=short_name, episode_number=episode_number)
+        
+        # Update message to uploading status
+        dl_msg.edit("<b>📤 Uploading to Telegram...</b>")
 
         # Fetch thumbnail
         user_thumbnail = get_thumbnail(user_id)
@@ -282,7 +282,7 @@ def download_and_upload_file(client, callback_query):
         send_and_delete_file(client, callback_query.message.chat.id, download_path, thumb_path, caption_to_use, user_id)
         # Remove the thumbnail file if it was downloaded
         remove_from_queue(user_id, direct_link)
-        dl_msg.edit(f"<b><pre>Episode Uploaded 🎉</pre></b>")
+        dl_msg.edit(f"<b>✅ Episode Uploaded Successfully! 🎉</b>")
         if thumb_path and os.path.exists(thumb_path):
             os.remove(thumb_path)
         if user_download_dir and os.path.exists(user_download_dir):
