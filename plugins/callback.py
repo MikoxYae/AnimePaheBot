@@ -257,9 +257,6 @@ def download_and_upload_file(client, callback_query):
         # Download the file with progress bar
         download_file(direct_link, download_path, progress_message=dl_msg, anime_name=short_name, episode_number=episode_number)
         
-        # Update message to uploading status
-        dl_msg.edit("<b>📤 Uploading to Telegram...</b>")
-
         # Fetch thumbnail
         user_thumbnail = get_thumbnail(user_id)
         poster_url = episode_data.get(user_id, {}).get("poster", None)
@@ -275,14 +272,16 @@ def download_and_upload_file(client, callback_query):
         else:
             thumb_path = None
 
-        # Send the file
+        # Send the file with upload progress
         user_caption = get_caption(user_id)
         caption_to_use = user_caption if user_caption else file_name        
 
-        send_and_delete_file(client, callback_query.message.chat.id, download_path, thumb_path, caption_to_use, user_id)
-        # Remove the thumbnail file if it was downloaded
+        send_and_delete_file(client, callback_query.message.chat.id, download_path, thumb_path, caption_to_use, user_id, progress_message=dl_msg, anime_name=short_name, episode_number=episode_number)
+        
+        # Remove from queue and cleanup
         remove_from_queue(user_id, direct_link)
         dl_msg.edit(f"<b>✅ Episode Uploaded Successfully! 🎉</b>")
+        
         if thumb_path and os.path.exists(thumb_path):
             os.remove(thumb_path)
         if user_download_dir and os.path.exists(user_download_dir):
@@ -290,6 +289,7 @@ def download_and_upload_file(client, callback_query):
 
     except Exception as e:
         callback_query.message.reply_text(f"Error: {str(e)}")
+        remove_from_queue(user_id, direct_link)
 
 # Callback query handler for Help and Close buttons
 @Client.on_callback_query()
