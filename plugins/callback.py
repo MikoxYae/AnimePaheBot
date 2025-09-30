@@ -55,17 +55,32 @@ def anime_details(client, callback_query):
     episode_data[callback_query.message.chat.id] = {
         "session_id": session_id,
         "poster": poster_url,
-        "title": title        # Store the poster URL here
+        "title": title
     }
 
     episode_button = InlineKeyboardMarkup([[InlineKeyboardButton("Episodes", callback_data="episodes")]])
-    client.send_photo(
-        chat_id=callback_query.message.chat.id,
-        photo=poster_url,
-        caption=message_text,
-        reply_markup=episode_button
-    )
-# Callback for episode list with pagination (send buttons once)
+    
+    # Edit the message instead of sending new one
+    try:
+        callback_query.message.edit_media(
+            media=callback_query.message.photo,
+            reply_markup=episode_button
+        )
+        callback_query.message.edit_caption(
+            caption=message_text,
+            reply_markup=episode_button
+        )
+    except:
+        # If edit fails, send new message
+        callback_query.message.delete()
+        client.send_photo(
+            chat_id=callback_query.message.chat.id,
+            photo=poster_url,
+            caption=message_text,
+            reply_markup=episode_button
+        )
+
+# Callback for episode list with pagination (edit message)
 @Client.on_callback_query(filters.regex(r"^episodes$"))
 def episode_list(client, callback_query, page=1):
     session_data = episode_data.get(callback_query.message.chat.id)
@@ -94,7 +109,6 @@ def episode_list(client, callback_query, page=1):
         for ep in episodes
     ]
 
-
     # Add navigation buttons for pagination
     nav_buttons = []
     if page > 1:
@@ -107,10 +121,13 @@ def episode_list(client, callback_query, page=1):
 
     reply_markup = InlineKeyboardMarkup(episode_buttons)
 
-    # If it's the first time, send a message, otherwise edit the existing one
-    if callback_query.message.reply_markup is None:
-        callback_query.message.reply_text(f"Page {page}/{last_page}: Select an episode:", reply_markup=reply_markup)
-    else:
+    # Edit the same message
+    try:
+        callback_query.message.edit_caption(
+            caption=f"Page {page}/{last_page}: Select an episode:",
+            reply_markup=reply_markup
+        )
+    except:
         callback_query.message.edit_reply_markup(reply_markup)
 
 # Callback to handle navigation between pages (edit buttons in place)
@@ -156,7 +173,7 @@ def fetch_download_links(client, callback_query):
         return
 
     # Store episode number for the user
-    episode_data[user_id]['current_episode'] = episode_number  # Add this line
+    episode_data[user_id]['current_episode'] = episode_number
 
     episode_session = episodes[episode_number]
     episode_url = f"https://{ANIMEPAHE_DOMAIN}/play/{session_id}/{episode_session}"
@@ -178,7 +195,15 @@ def fetch_download_links(client, callback_query):
         for link in download_links
     ]
     reply_markup = InlineKeyboardMarkup(download_buttons)
-    callback_query.message.reply_text("Select a download link:", reply_markup=reply_markup)
+    
+    # Edit the same message to show quality options
+    try:
+        callback_query.message.edit_caption(
+            caption=f"Episode {episode_number}: Select quality:",
+            reply_markup=reply_markup
+        )
+    except:
+        callback_query.message.edit_reply_markup(reply_markup)
 
 @Client.on_callback_query(filters.regex(r"set_method_"))
 def change_upload_method(client, callback_query):
@@ -219,8 +244,8 @@ def download_and_upload_file(client, callback_query):
     user_id = callback_query.from_user.id
     add_to_queue(user_id, username, direct_link)
     # Retrieve episode number from episode_data
-    episode_number = episode_data.get(user_id, {}).get('current_episode', 'Unknown')  # Default to 'Unknown Episode'
-    title = episode_data.get(user_id, {}).get('title', 'Unknown Title')  # Default to 'Unknown Title'
+    episode_number = episode_data.get(user_id, {}).get('current_episode', 'Unknown')
+    title = episode_data.get(user_id, {}).get('title', 'Unknown Title')
 
     # Extract download button title
     download_button_title = next(
@@ -250,7 +275,7 @@ def download_and_upload_file(client, callback_query):
     os.makedirs(user_download_dir, exist_ok=True)
     download_path = os.path.join(user_download_dir, file_name)
 
-    # Send initial progress message
+    # NOW send NEW message for download progress
     dl_msg = callback_query.message.reply_text(f"<b>📥 Starting Download...</b>\n\n<b>Anime:</b> <code>{short_name}</code>\n<b>Episode:</b> <code>{episode_number}</code>")
     
     try:
