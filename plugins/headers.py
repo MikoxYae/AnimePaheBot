@@ -1,4 +1,9 @@
+#..........This Bot Made By [RAHAT](https://t.me/r4h4t_69)..........#
+#..........Anyone Can Modify This As He Likes..........#
+#..........Just one requests do not remove my credit..........#
+
 import cloudscraper
+from plugins.dns_resolver import *  # Import DNS resolver
 
 # Use cloudscraper instead of requests.Session()
 session = cloudscraper.create_scraper()
