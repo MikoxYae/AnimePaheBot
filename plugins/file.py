@@ -13,6 +13,8 @@ import subprocess
 import json
 from config import LOG_CHANNEL
 import cloudscraper
+import time
+import math
 
 def create_short_name(name):
     # Check if the name length is greater than 25
@@ -21,6 +23,7 @@ def create_short_name(name):
         short_name = ''.join(word[0].upper() for word in name.split())					
         return short_name    
     return name
+
 def get_media_details(path):
     try:
         # Run ffprobe command to get media info in JSON format
@@ -58,15 +61,42 @@ def get_media_details(path):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
-'''def download_file(url, download_path):
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(download_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-    return download_path'''
 
-def download_file(url, download_path):
+def humanbytes(size):
+    """Convert bytes to human readable format"""
+    if not size:
+        return "0 B"
+    power = 2**10
+    n = 0
+    power_labels = {0: '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    while size > power:
+        size /= power
+        n += 1
+    return f"{size:.2f} {power_labels[n]}B"
+
+def time_formatter(seconds):
+    """Convert seconds to human readable time format"""
+    if seconds is None:
+        return "Unknown"
+    result = ''
+    (days, remainder) = divmod(seconds, 86400)
+    days = int(days)
+    if days != 0:
+        result += f'{days}d '
+    (hours, remainder) = divmod(remainder, 3600)
+    hours = int(hours)
+    if hours != 0:
+        result += f'{hours}h '
+    (minutes, seconds) = divmod(remainder, 60)
+    minutes = int(minutes)
+    if minutes != 0:
+        result += f'{minutes}m '
+    seconds = int(seconds)
+    result += f'{seconds}s'
+    return result
+
+def download_file(url, download_path, progress_message=None, anime_name=None, episode_number=None):
+    """Download file with progress bar"""
     # Create a CloudScraper instance to bypass Cloudflare
     scraper = cloudscraper.create_scraper()
     
@@ -79,44 +109,53 @@ def download_file(url, download_path):
     # Use the scraper instead of requests.get
     with scraper.get(url, headers=headers, stream=True) as r:
         r.raise_for_status()
+        
+        total_size = int(r.headers.get('content-length', 0))
+        downloaded = 0
+        start_time = time.time()
+        last_update_time = start_time
+        
         with open(download_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    # Update progress every 2 seconds
+                    current_time = time.time()
+                    if progress_message and (current_time - last_update_time) >= 2:
+                        last_update_time = current_time
+                        
+                        # Calculate progress
+                        percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
+                        elapsed_time = current_time - start_time
+                        speed = downloaded / elapsed_time if elapsed_time > 0 else 0
+                        eta = (total_size - downloaded) / speed if speed > 0 else 0
+                        
+                        # Create progress bar
+                        filled_length = int(10 * downloaded // total_size) if total_size > 0 else 0
+                        bar = '█' * filled_length + '░' * (10 - filled_length)
+                        
+                        # Format progress message
+                        progress_text = f"<b>📥 Downloading...</b>\n\n"
+                        progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
+                        progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
+                        progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
+                        progress_text += f"<b>Downloaded:</b> {humanbytes(downloaded)} / {humanbytes(total_size)}\n"
+                        progress_text += f"<b>Speed:</b> {humanbytes(speed)}/s\n"
+                        progress_text += f"<b>ETA:</b> {time_formatter(eta)}"
+                        
+                        try:
+                            progress_message.edit(progress_text)
+                        except:
+                            pass
+    
     return download_path
     
 def sanitize_filename(file_name):
     # Remove invalid characters from the file name
     file_name = re.sub(r'[<>:"/\\|?*]', '', file_name)
     return file_name
-    
-        
-'''def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="", user_id=None):
-    upload_method = get_upload_method(user_id)  # Retrieve user's upload method
-    
-    try:
-        if upload_method == "document":
-            # Send as document
-            client.send_document(
-                chat_id,
-                file_path,
-                thumb=thumbnail if thumbnail else None,
-                caption=caption
-            )
-        else:
-            # Send as video
-            client.send_video(
-                chat_id,
-                file_path,
-                #thumb=thumbnail if thumbnail else None,
-                thumb=None,
-                caption=caption
-            )
-        
-        os.remove(file_path)  # Delete the file after sending
-        
-    except Exception as e:
-        client.send_message(chat_id, f"Error: {str(e)}")'''
-
 
 def send_and_delete_file(client, chat_id, file_path, thumbnail=None, caption="", user_id=None):
     upload_method = get_upload_method(user_id)  # Retrieve user's upload method
@@ -190,5 +229,3 @@ def random_string(length):
     # Define the characters to choose from (letters and digits)
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
-
-
