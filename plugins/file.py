@@ -96,7 +96,7 @@ def time_formatter(seconds):
     return result
 
 def download_file(url, download_path, progress_message=None, anime_name=None, episode_number=None):
-    """Download file with progress bar - Optimized version"""
+    """Download file with progress bar and retry logic"""
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -105,100 +105,124 @@ def download_file(url, download_path, progress_message=None, anime_name=None, ep
         'Connection': 'keep-alive',
     }
     
-    # Use regular requests for faster download
-    try:
-        with requests.get(url, headers=headers, stream=True, timeout=30) as r:
-            r.raise_for_status()
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            # Use regular requests for faster download
+            with requests.get(url, headers=headers, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                
+                total_size = int(r.headers.get('content-length', 0))
+                downloaded = 0
+                start_time = time.time()
+                last_update_time = start_time
+                chunk_size = 1024 * 1024  # 1MB chunks for faster download
+                
+                with open(download_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # Update progress every 2 seconds
+                            current_time = time.time()
+                            if progress_message and (current_time - last_update_time) >= 2:
+                                last_update_time = current_time
+                                
+                                # Calculate progress
+                                percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
+                                elapsed_time = current_time - start_time
+                                speed = downloaded / elapsed_time if elapsed_time > 0 else 0
+                                eta = (total_size - downloaded) / speed if speed > 0 else 0
+                                
+                                # Create progress bar
+                                filled_length = int(10 * downloaded // total_size) if total_size > 0 else 0
+                                bar = '█' * filled_length + '░' * (10 - filled_length)
+                                
+                                # Format progress message
+                                progress_text = f"<b>📥 Downloading...</b>\n\n"
+                                progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
+                                progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
+                                progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
+                                progress_text += f"<b>Downloaded:</b> {humanbytes(downloaded)} / {humanbytes(total_size)}\n"
+                                progress_text += f"<b>Speed:</b> {humanbytes(speed)}/s\n"
+                                progress_text += f"<b>ETA:</b> {time_formatter(eta)}"
+                                
+                                try:
+                                    progress_message.edit(progress_text)
+                                except:
+                                    pass
             
-            total_size = int(r.headers.get('content-length', 0))
-            downloaded = 0
-            start_time = time.time()
-            last_update_time = start_time
-            chunk_size = 1024 * 1024  # 1MB chunks for faster download
+            # If download completed successfully, break the retry loop
+            return download_path
             
-            with open(download_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
+        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError, requests.exceptions.IncompleteRead) as e:
+            retry_count += 1
+            if retry_count < max_retries:
+                if progress_message:
+                    try:
+                        progress_message.edit(f"<b>⚠️ Connection interrupted. Retrying... ({retry_count}/{max_retries})</b>")
+                    except:
+                        pass
+                time.sleep(2)  # Wait before retry
+            else:
+                # Try with cloudscraper as final fallback
+                try:
+                    scraper = cloudscraper.create_scraper()
+                    with scraper.get(url, headers=headers, stream=True) as r:
+                        r.raise_for_status()
                         
-                        # Update progress every 2 seconds
-                        current_time = time.time()
-                        if progress_message and (current_time - last_update_time) >= 2:
-                            last_update_time = current_time
-                            
-                            # Calculate progress
-                            percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
-                            elapsed_time = current_time - start_time
-                            speed = downloaded / elapsed_time if elapsed_time > 0 else 0
-                            eta = (total_size - downloaded) / speed if speed > 0 else 0
-                            
-                            # Create progress bar
-                            filled_length = int(10 * downloaded // total_size) if total_size > 0 else 0
-                            bar = '█' * filled_length + '░' * (10 - filled_length)
-                            
-                            # Format progress message
-                            progress_text = f"<b>📥 Downloading...</b>\n\n"
-                            progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
-                            progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
-                            progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
-                            progress_text += f"<b>Downloaded:</b> {humanbytes(downloaded)} / {humanbytes(total_size)}\n"
-                            progress_text += f"<b>Speed:</b> {humanbytes(speed)}/s\n"
-                            progress_text += f"<b>ETA:</b> {time_formatter(eta)}"
-                            
-                            try:
-                                progress_message.edit(progress_text)
-                            except:
-                                pass
-    except requests.exceptions.RequestException:
-        # Fallback to cloudscraper if regular requests fails
-        scraper = cloudscraper.create_scraper()
-        with scraper.get(url, headers=headers, stream=True) as r:
-            r.raise_for_status()
-            
-            total_size = int(r.headers.get('content-length', 0))
-            downloaded = 0
-            start_time = time.time()
-            last_update_time = start_time
-            chunk_size = 1024 * 1024  # 1MB chunks
-            
-            with open(download_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
+                        total_size = int(r.headers.get('content-length', 0))
+                        downloaded = 0
+                        start_time = time.time()
+                        last_update_time = start_time
+                        chunk_size = 1024 * 1024
                         
-                        # Update progress every 2 seconds
-                        current_time = time.time()
-                        if progress_message and (current_time - last_update_time) >= 2:
-                            last_update_time = current_time
-                            
-                            # Calculate progress
-                            percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
-                            elapsed_time = current_time - start_time
-                            speed = downloaded / elapsed_time if elapsed_time > 0 else 0
-                            eta = (total_size - downloaded) / speed if speed > 0 else 0
-                            
-                            # Create progress bar
-                            filled_length = int(10 * downloaded // total_size) if total_size > 0 else 0
-                            bar = '█' * filled_length + '░' * (10 - filled_length)
-                            
-                            # Format progress message
-                            progress_text = f"<b>📥 Downloading...</b>\n\n"
-                            progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
-                            progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
-                            progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
-                            progress_text += f"<b>Downloaded:</b> {humanbytes(downloaded)} / {humanbytes(total_size)}\n"
-                            progress_text += f"<b>Speed:</b> {humanbytes(speed)}/s\n"
-                            progress_text += f"<b>ETA:</b> {time_formatter(eta)}"
-                            
-                            try:
-                                progress_message.edit(progress_text)
-                            except:
-                                pass
+                        with open(download_path, 'wb') as f:
+                            for chunk in r.iter_content(chunk_size=chunk_size):
+                                if chunk:
+                                    f.write(chunk)
+                                    downloaded += len(chunk)
+                                    
+                                    # Update progress every 2 seconds
+                                    current_time = time.time()
+                                    if progress_message and (current_time - last_update_time) >= 2:
+                                        last_update_time = current_time
+                                        
+                                        # Calculate progress
+                                        percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
+                                        elapsed_time = current_time - start_time
+                                        speed = downloaded / elapsed_time if elapsed_time > 0 else 0
+                                        eta = (total_size - downloaded) / speed if speed > 0 else 0
+                                        
+                                        # Create progress bar
+                                        filled_length = int(10 * downloaded // total_size) if total_size > 0 else 0
+                                        bar = '█' * filled_length + '░' * (10 - filled_length)
+                                        
+                                        # Format progress message
+                                        progress_text = f"<b>📥 Downloading... (Fallback mode)</b>\n\n"
+                                        progress_text += f"<b>Anime:</b> <code>{anime_name or 'Unknown'}</code>\n"
+                                        progress_text += f"<b>Episode:</b> <code>{episode_number or 'Unknown'}</code>\n\n"
+                                        progress_text += f"<code>{bar}</code> {percentage:.1f}%\n\n"
+                                        progress_text += f"<b>Downloaded:</b> {humanbytes(downloaded)} / {humanbytes(total_size)}\n"
+                                        progress_text += f"<b>Speed:</b> {humanbytes(speed)}/s\n"
+                                        progress_text += f"<b>ETA:</b> {time_formatter(eta)}"
+                                        
+                                        try:
+                                            progress_message.edit(progress_text)
+                                        except:
+                                            pass
+                    return download_path
+                except Exception as fallback_error:
+                    raise Exception(f"Download failed after {max_retries} retries: {str(e)}")
+        
+        except Exception as e:
+            raise Exception(f"Download error: {str(e)}")
     
     return download_path
-    
+
 def sanitize_filename(file_name):
     # Remove invalid characters from the file name
     file_name = re.sub(r'[<>:"/\\|?*]', '', file_name)
